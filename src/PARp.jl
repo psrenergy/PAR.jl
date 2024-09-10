@@ -107,15 +107,15 @@ function fit_ar!(ar::AR; stage::Int = 1, par_seasonal::Int = 1)
     y_to_fit, X_to_fit = build_y_X(ar.y, ar.p, stage, par_seasonal)
     ar.fitted_X = X_to_fit
     ar.fitted_y = y_to_fit
-    if all(iszero, y_to_fit)
+    if all(iszero, y_to_fit) || all(iszero, X_to_fit)
         ar.ols = nothing
-        ar.ϕ = [1.0]
+        ar.ϕ = Float64[]
         ar.coef_table = nothing
         ar.p_values = zeros(1)
         ar.resid = y_to_fit
-        ar.var_resid = 0.0
-        ar.aic = 0.0
-        ar.aicc = 0.0
+        ar.var_resid = Inf
+        ar.aic = Inf
+        ar.aicc = Inf
     else
         ols = lm(X_to_fit, y_to_fit)
         ar.ols = ols
@@ -138,7 +138,7 @@ function fit_par!(par::PARp)
     # fit all AR models
     for stage in 1:num_stages(par)
         candiate_ar_per_stage = AR[]
-        for p in 1:par.p_lim
+        for p in 0:par.p_lim
             candidate_ar_at_stage = AR(par.y_normalized, p)
             fit_ar!(candidate_ar_at_stage; stage = stage, par_seasonal = par.seasonal)
             push!(candiate_ar_per_stage, candidate_ar_at_stage)
@@ -203,7 +203,11 @@ function simulate_par(par_models::Vector{PARp}, steps_ahead::Int, n_scenarios::I
             end
             # Every observation is the same on a certain stage
             if all(iszero, pm.best_AR_stage[current_stage_to_predict].fitted_y)
-                scenarios[t_scen_idx, i, :] .= scenarios[t_scen_idx-1, i, :]
+                if t_scen_idx == 1
+                    scenarios[t_scen_idx, i, :] .= pm.y[end]
+                else
+                    scenarios[t_scen_idx, i, :] .= scenarios[t_scen_idx-1, i, :]
+                end
                 continue
             end
             current_model_p = pm.best_AR_stage[current_stage_to_predict].p
